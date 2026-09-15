@@ -1,0 +1,113 @@
+# ============================================
+# EDUAI - Git Ignore
+# ============================================
+
+# --------------------------------------------
+# Environment & Secrets
+# --------------------------------------------
+.env
+.env.*
+!.env.example
+
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+credentials.json
+serviceAccountKey.json
+
+# --------------------------------------------
+# Node.js
+# --------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --------------------------------------------
+# TypeScript
+# --------------------------------------------
+*.tsbuildinfo
+
+# --------------------------------------------
+# Build & Coverage
+# --------------------------------------------
+dist/
+build/
+coverage/
+.nyc_output/
+
+# --------------------------------------------
+# Prisma
+# --------------------------------------------
+prisma/generated/
+
+# --------------------------------------------
+# React / Web
+# --------------------------------------------
+web/node_modules/
+web/dist/
+web/build/
+
+# --------------------------------------------
+# Flutter
+# --------------------------------------------
+mobile/.dart_tool/
+mobile/.packages
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/build/
+mobile/.pub-cache/
+
+# --------------------------------------------
+# Android
+# --------------------------------------------
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/app/debug/
+mobile/android/app/profile/
+mobile/android/app/release/
+
+# --------------------------------------------
+# iOS
+# --------------------------------------------
+mobile/ios/Pods/
+mobile/ios/.symlinks/
+mobile/ios/Flutter/ephemeral/
+mobile/ios/Flutter/Generated.xcconfig
+mobile/ios/Flutter/flutter_export_environment.sh
+
+# --------------------------------------------
+# Logs
+# --------------------------------------------
+*.log
+logs/
+
+# --------------------------------------------
+# Operating System
+# --------------------------------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --------------------------------------------
+# IDE / Editor
+# --------------------------------------------
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+.idea/
+*.iml
+
+# --------------------------------------------
+# Temporary files
+# --------------------------------------------
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
