@@ -28,7 +28,12 @@ model Tenant {
   updatedAt DateTime @updatedAt
 
   roles     Role[]
-  users User[]
+  users     User[]
+  categories Category[]
+  formations Formation[]
+  modules    Module[]
+  lessons Lesson[]
+  resources Resource[]
 
 }
 
@@ -90,5 +95,145 @@ model User {
   updatedAt      DateTime   @updatedAt
 
   tenant         Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-role           Role?       @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Restrict)
+  role           Role?       @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Restrict)
+  formations     Formation[]
+
+  @@unique([tenantId, id])
+}
+
+
+model Category {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  slug        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  formations  Formation[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, slug])
+  @@unique([tenantId, id])
+}
+
+
+enum FormationStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum LessonType {
+  TEXT
+  VIDEO
+  DOCUMENT
+  MIXED
+}
+
+enum ResourceType {
+  PDF
+  DOCUMENT
+  IMAGE
+  VIDEO
+  LINK
+  OTHER
+}
+
+
+model Formation {
+  id           String          @id @default(uuid())
+  tenantId     String
+  categoryId   String
+  formateurId  String
+  title        String
+  slug         String
+  description  String?
+  thumbnailUrl String?
+  status       FormationStatus @default(DRAFT)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category    Category @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict)
+  formateur   User     @relation(fields: [tenantId, formateurId], references: [tenantId, id], onDelete: Restrict)
+  modules      Module[]
+
+  @@unique([tenantId, categoryId, id])
+  @@unique([tenantId, slug])
+  @@unique([tenantId, id])
+}
+
+
+model Module {
+  id          String   @id @default(uuid())
+  tenantId    String
+  formationId String
+  title       String
+  description String?
+  position    Int
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  formation   Formation @relation(fields: [tenantId, formationId], references: [tenantId, id], onDelete: Cascade)
+  lessons Lesson[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, formationId, id])
+  @@unique([tenantId, formationId, position])
+}
+
+model Lesson {
+  id          String     @id @default(uuid())
+  tenantId    String
+  moduleId    String
+  title       String
+  description String?
+  type        LessonType
+  content     String?
+  videoUrl    String?
+  duration    Int?
+  position    Int
+  isPreview   Boolean    @default(false)
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  module      Module     @relation(fields: [tenantId, moduleId], references: [tenantId, id], onDelete: Cascade)
+  resources Resource[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, moduleId, id])
+  @@unique([tenantId, moduleId, position])
+}
+
+
+model Resource {
+  id             String       @id @default(uuid())
+  tenantId       String
+  lessonId       String
+  title          String
+  description    String?
+  type           ResourceType
+  url            String
+  fileName       String?
+  mimeType       String?
+  fileSize       Int?
+  position       Int
+  isDownloadable Boolean      @default(true)
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lesson         Lesson       @relation(fields: [tenantId, lessonId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, lessonId, id])
+  @@unique([tenantId, lessonId, position])
 }
