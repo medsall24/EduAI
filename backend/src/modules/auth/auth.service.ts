@@ -1,8 +1,10 @@
 import { prisma } from "../../config/prisma.js";
+
 import {
   hashPassword,
   verifyPassword,
 } from "../../services/password.service.js";
+
 import type { AuthUser } from "../../types/auth.types.js";
 
 import {
@@ -11,13 +13,18 @@ import {
   verifyRefreshToken,
 } from "../../services/auth-token.service.js";
 
+import { hashRefreshToken } from "../../services/token-hash.service.js";
+
+import {
+  getRefreshTokenExpiration,
+} from "../../services/token-expiration.service.js";
+
 import { AppError } from "../../errors/app-error.js";
 import type { RegisterInput } from "./auth.schema.js";
 
 // Service centralisant les opérations d'authentification.
 // La logique métier reste indépendante des contrôleurs HTTP.
 export class AuthService {
-
   // Récupère le tenant utilisé par l'environnement de développement.
   // Cette méthode est temporaire et sera remplacée par un contexte
   // de tenant déterminé par l'authentification et les règles métier.
@@ -138,8 +145,7 @@ export class AuthService {
     };
   }
 
-
-    // Authentifie un utilisateur et génère son access token.
+  // Authentifie un utilisateur et génère sa session.
   async login(
     email: string,
     password: string,
@@ -152,31 +158,72 @@ export class AuthService {
     // Utilise une réponse générique afin de ne pas révéler
     // si l'adresse email existe ou si seul le mot de passe est incorrect.
     if (!authUser) {
-  throw new AppError(
-    401,
-    "Invalid email or password",
-  );
-}
+      throw new AppError(
+        401,
+        "Invalid email or password",
+      );
+    }
 
     const accessToken = this.generateAccessToken(authUser);
     const refreshToken = generateRefreshToken(authUser);
+
+    const refreshTokenHash =
+      hashRefreshToken(refreshToken);
+
+    const expiresAt = getRefreshTokenExpiration();
+
+    await prisma.session.create({
+      data: {
+        userId: authUser.userId,
+        refreshTokenHash,
+        expiresAt,
+      },
+    });
 
     return {
       accessToken,
       refreshToken,
       user: authUser,
     };
-      }
+  }
 
   // Génère un access token à partir du contexte utilisateur authentifié.
   generateAccessToken(authUser: AuthUser): string {
     return generateAccessToken(authUser);
   }
 
-
-    // Renouvelle l'access token à partir d'un refresh token valide.
+  // Renouvelle l'access token à partir d'un refresh token valide.
+  // Le refresh token est également soumis à une session persistée
+  // et à une rotation afin de limiter sa réutilisation.
   async refreshAccessToken(refreshToken: string) {
     const { userId } = verifyRefreshToken(refreshToken);
+
+    const refreshTokenHash =
+      hashRefreshToken(refreshToken);
+
+    const session = await prisma.session.findUnique({
+      where: {
+        refreshTokenHash,
+      },
+      select: {
+        id: true,
+        userId: true,
+        expiresAt: true,
+        revokedAt: true,
+      },
+    });
+
+    if (
+      !session ||
+      session.userId !== userId ||
+      session.revokedAt !== null ||
+      session.expiresAt <= new Date()
+    ) {
+      throw new AppError(
+        401,
+        "Invalid or expired refresh session",
+      );
+    }
 
     const user = await prisma.user.findUnique({
       where: {
@@ -204,10 +251,53 @@ export class AuthService {
 
     const accessToken = generateAccessToken(authUser);
 
+    const newRefreshToken = generateRefreshToken(authUser);
+
+    const newRefreshTokenHash =
+      hashRefreshToken(newRefreshToken);
+
+    const newExpiresAt =
+      getRefreshTokenExpiration();
+
+    await prisma.$transaction([
+      prisma.session.update({
+        where: {
+          id: session.id,
+        },
+        data: {
+          revokedAt: new Date(),
+        },
+      }),
+
+      prisma.session.create({
+        data: {
+          userId: authUser.userId,
+          refreshTokenHash: newRefreshTokenHash,
+          expiresAt: newExpiresAt,
+        },
+      }),
+    ]);
+
     return {
       accessToken,
+      refreshToken: newRefreshToken,
       user: authUser,
     };
   }
-  
+
+  // Révoque la session associée au refresh token.
+  async logout(refreshToken: string): Promise<void> {
+    const refreshTokenHash =
+      hashRefreshToken(refreshToken);
+
+    await prisma.session.updateMany({
+      where: {
+        refreshTokenHash,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: new Date(),
+      },
+    });
+  }
 }

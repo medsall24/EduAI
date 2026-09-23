@@ -87,4 +87,25 @@ export class AuthController {
       next(error);
     }
   }
+
+    async logout(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    try {
+      const input = refreshTokenSchema.parse(req.body);
+
+      await this.authService.logout(input.refreshToken);
+
+      res.status(200).json({
+        success: true,
+        message: "Logged out successfully",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  
 }

@@ -25,6 +25,10 @@ router.post(
   authController.refresh.bind(authController),
 );
 
-
+// Déconnexion et révocation de la session associée au refresh token.
+router.post(
+  "/logout",
+  authController.logout.bind(authController),
+);
 
 export default router;
