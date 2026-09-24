@@ -3,6 +3,8 @@ import express from "express";
 import authRoutes from "./modules/auth/auth.routes.js";
 import enrollmentRoutes from "./modules/enrollment/enrollment.routes.js";
 import rbacRoutes from "./modules/rbac/rbac.routes.js";
+import formationRoutes from "./modules/formations/formation.routes.js";
+
 import { errorHandler } from "./middlewares/error.middleware.js";
 // Création de l'application Express.
 const app = express();
@@ -26,6 +28,9 @@ app.use("/api/enrollments", enrollmentRoutes);
 
 // Routes de test du contrôle d'accès RBAC.
 app.use("/api/rbac", rbacRoutes);
+
+// Routes du module formation
+app.use("/api/formations", formationRoutes);
 
 // Gestionnaire centralisé des erreurs.
 // Il doit être enregistré après toutes les routes.
