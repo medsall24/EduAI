@@ -6,6 +6,8 @@ import rbacRoutes from "./modules/rbac/rbac.routes.js";
 import formationRoutes from "./modules/formations/formation.routes.js";
 import moduleRoutes from "./modules/modules/module.routes.js";
 import lessonRoutes from "./modules/lessons/lesson.routes.js";
+import resourceRoutes from "./modules/resources/resource.routes.js";
+
 import { errorHandler } from "./middlewares/error.middleware.js";
 // Création de l'application Express.
 const app = express();
@@ -38,6 +40,9 @@ app.use("/api", moduleRoutes);
 
 // Routes du lesson management.
 app.use("/api", lessonRoutes);
+
+// Routes Resource management.
+app.use("/api", resourceRoutes);
 
 // Gestionnaire centralisé des erreurs.
 // Il doit etre enregistré après toutes les routes.
