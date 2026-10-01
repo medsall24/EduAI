@@ -7,6 +7,7 @@ import formationRoutes from "./modules/formations/formation.routes.js";
 import moduleRoutes from "./modules/modules/module.routes.js";
 import lessonRoutes from "./modules/lessons/lesson.routes.js";
 import resourceRoutes from "./modules/resources/resource.routes.js";
+import categoryRoutes from "./modules/categories/category.routes.js";
 
 import { errorHandler } from "./middlewares/error.middleware.js";
 // Création de l'application Express.
@@ -34,6 +35,9 @@ app.use("/api/rbac", rbacRoutes);
 
 // Routes du module formation.
 app.use("/api/formations", formationRoutes);
+
+// Routes du module category management.
+app.use("/api/categories", categoryRoutes);
 
 // Routes du module management.
 app.use("/api", moduleRoutes);
