@@ -8,6 +8,7 @@ import moduleRoutes from "./modules/modules/module.routes.js";
 import lessonRoutes from "./modules/lessons/lesson.routes.js";
 import resourceRoutes from "./modules/resources/resource.routes.js";
 import categoryRoutes from "./modules/categories/category.routes.js";
+import userRoutes from "./modules/users/user.routes.js";
 
 import { errorHandler } from "./middlewares/error.middleware.js";
 // Création de l'application Express.
@@ -26,6 +27,9 @@ app.get("/", (_req, res) => {
 
 // Routes d'authentification.
 app.use("/api/auth", authRoutes);
+
+// Routes de gestion des utilisateurs.
+app.use("/api/users", userRoutes);
 
 // Routes liées aux inscriptions aux formations.
 app.use("/api/enrollments", enrollmentRoutes);
