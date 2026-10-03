@@ -259,24 +259,36 @@ export class AuthService {
     const newExpiresAt =
       getRefreshTokenExpiration();
 
-    await prisma.$transaction([
-      prisma.session.update({
-        where: {
-          id: session.id,
-        },
-        data: {
-          revokedAt: new Date(),
-        },
-      }),
+  await prisma.$transaction(async (tx) => {
+  const result = await tx.session.updateMany({
+    where: {
+      id: session.id,
+      userId: authUser.userId,
+      revokedAt: null,
+      expiresAt: {
+        gt: new Date(),
+      },
+    },
+    data: {
+      revokedAt: new Date(),
+    },
+  });
 
-      prisma.session.create({
-        data: {
-          userId: authUser.userId,
-          refreshTokenHash: newRefreshTokenHash,
-          expiresAt: newExpiresAt,
-        },
-      }),
-    ]);
+  if (result.count !== 1) {
+    throw new AppError(
+      401,
+      "Invalid or expired refresh session",
+    );
+  }
+
+  await tx.session.create({
+    data: {
+      userId: authUser.userId,
+      refreshTokenHash: newRefreshTokenHash,
+      expiresAt: newExpiresAt,
+    },
+  });
+});
 
     return {
       accessToken,

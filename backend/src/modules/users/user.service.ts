@@ -182,21 +182,26 @@ export class UserService {
     }
 
     return prisma.user.update({
-      where: { id: userId },
-      data: input,
-      select: {
-        id: true,
-        tenantId: true,
-        roleId: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        isActive: true,
-        emailVerified: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+  where: {
+    tenantId_id: {
+      tenantId,
+      id: userId,
+    },
+  },
+  data: input,
+  select: {
+    id: true,
+    tenantId: true,
+    roleId: true,
+    firstName: true,
+    lastName: true,
+    email: true,
+    isActive: true,
+    emailVerified: true,
+    createdAt: true,
+    updatedAt: true,
+  },
+});
   }
 
   /**
@@ -210,7 +215,12 @@ export class UserService {
     await this.findById(tenantId, userId);
 
     return prisma.user.update({
-      where: { id: userId },
+      where: {
+  tenantId_id: {
+    tenantId,
+    id: userId,
+  },
+},
       data: { isActive: input.isActive },
       select: {
         id: true,
@@ -248,8 +258,13 @@ export class UserService {
     }
 
     await prisma.user.delete({
-      where: { id: userId },
-    });
+  where: {
+    tenantId_id: {
+      tenantId,
+      id: userId,
+    },
+  },
+});
 
     return { message: "User deleted successfully" };
   }

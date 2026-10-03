@@ -221,16 +221,15 @@ export const updateFormation = async (
     ensureTenantContext(tenantId);
 
   const existingFormation =
-    await prisma.formation.findFirst({
+    await prisma.formation.findUnique({
       where: {
-        id: formationId,
-        tenantId: currentTenantId,
+        tenantId_id: {
+          tenantId: currentTenantId,
+          id: formationId,
+        },
       },
       select: {
         id: true,
-        categoryId: true,
-        formateurId: true,
-        slug: true,
       },
     });
 
@@ -265,7 +264,10 @@ export const updateFormation = async (
 
   return prisma.formation.update({
     where: {
-      id: formationId,
+      tenantId_id: {
+        tenantId: currentTenantId,
+        id: formationId,
+      },
     },
     data: {
       ...(input.categoryId
@@ -311,27 +313,17 @@ export const deleteFormation = async (
   const currentTenantId =
     ensureTenantContext(tenantId);
 
-  const formation =
-    await prisma.formation.findFirst({
-      where: {
-        id: formationId,
-        tenantId: currentTenantId,
-      },
-      select: {
-        id: true,
-      },
-    });
+  const result = await prisma.formation.deleteMany({
+    where: {
+      id: formationId,
+      tenantId: currentTenantId,
+    },
+  });
 
-  if (!formation) {
+  if (result.count === 0) {
     throw new AppError(
       404,
       "Formation not found",
     );
   }
-
-  await prisma.formation.delete({
-    where: {
-      id: formation.id,
-    },
-  });
 };
