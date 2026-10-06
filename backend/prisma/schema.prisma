@@ -22,6 +22,7 @@ model Tenant {
   resources   Resource[]
   roles       Role[]
   users       User[]
+  progress    Progress[]
 }
 
 model Role {
@@ -73,6 +74,8 @@ model User {
   enrollments   Enrollment[]
   formations    Formation[]
   sessions      Session[]
+  progress      Progress[]
+
   tenant        Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   role          Role?        @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Restrict)
 
@@ -128,6 +131,7 @@ model Formation {
   tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   formateur    User            @relation(fields: [tenantId, formateurId], references: [tenantId, id])
   modules      Module[]
+  progress     Progress[]
 
   @@unique([tenantId, categoryId, id])
   @@unique([tenantId, slug])
@@ -171,6 +175,7 @@ model Lesson {
   tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   module      Module     @relation(fields: [tenantId, moduleId], references: [tenantId, id], onDelete: Cascade)
   resources   Resource[]
+  progress    Progress[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, moduleId, id])
@@ -217,6 +222,30 @@ model Enrollment {
   @@unique([tenantId, formationId, userId])
   @@unique([tenantId, formationId, id])
 }
+
+
+model Progress {
+  id          String    @id @default(uuid())
+  tenantId    String
+  userId      String
+  formationId String
+  lessonId    String
+  isCompleted Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+  formation Formation @relation(fields: [tenantId, formationId], references: [tenantId, id], onDelete: Cascade)
+  lesson    Lesson    @relation(fields: [tenantId, lessonId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, lessonId])
+  @@unique([tenantId, id])
+  @@index([tenantId, userId, formationId])
+  @@index([tenantId, formationId])
+}
+
 
 enum SystemRole {
   SUPER_ADMIN

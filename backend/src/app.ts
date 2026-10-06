@@ -9,6 +9,7 @@ import lessonRoutes from "./modules/lessons/lesson.routes.js";
 import resourceRoutes from "./modules/resources/resource.routes.js";
 import categoryRoutes from "./modules/categories/category.routes.js";
 import userRoutes from "./modules/users/user.routes.js";
+import progressRoutes from "./modules/progress/progress.routes.js";
 
 import { errorHandler } from "./middlewares/error.middleware.js";
 // Création de l'application Express.
@@ -51,6 +52,10 @@ app.use("/api", lessonRoutes);
 
 // Routes Resource management.
 app.use("/api", resourceRoutes);
+
+// Routes du module de gestion de la progression.
+app.use("/api", progressRoutes);
+
 
 // Gestionnaire centralisé des erreurs.
 // Il doit etre enregistré après toutes les routes.
