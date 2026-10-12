@@ -123,6 +123,28 @@ const permissions = [
     description: "Supprimer une ressource",
   },
 
+  // Permissions de gestion des Quiz.
+{
+  name: "quiz.read",
+  description: "Consulter les Quiz",
+},
+{
+  name: "quiz.create",
+  description: "Créer un Quiz",
+},
+{
+  name: "quiz.update",
+  description: "Modifier un Quiz",
+},
+{
+  name: "quiz.delete",
+  description: "Supprimer un Quiz",
+},
+{
+  name: "quiz.submit",
+  description: "Soumettre les réponses à un Quiz",
+},
+
   // Permissions de gestion des inscriptions.
   {
     name: "enrollment.read",
@@ -188,6 +210,11 @@ const main = async (): Promise<void> => {
       "lesson.update",
       "lesson.delete",
 
+      "quiz.read",
+      "quiz.create",
+      "quiz.update",
+      "quiz.delete",
+
       "resource.read",
       "resource.create",
       "resource.update",
@@ -205,6 +232,8 @@ const main = async (): Promise<void> => {
 
       "module.read",
       "lesson.read",
+      "quiz.read",
+      "quiz.submit",
       "resource.read",
 
       "enrollment.read",

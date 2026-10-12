@@ -10,6 +10,7 @@ import resourceRoutes from "./modules/resources/resource.routes.js";
 import categoryRoutes from "./modules/categories/category.routes.js";
 import userRoutes from "./modules/users/user.routes.js";
 import progressRoutes from "./modules/progress/progress.routes.js";
+import quizRoutes from "./modules/quizzes/quiz.routes.js";
 
 import { errorHandler } from "./middlewares/error.middleware.js";
 // Création de l'application Express.
@@ -55,6 +56,9 @@ app.use("/api", resourceRoutes);
 
 // Routes du module de gestion de la progression.
 app.use("/api", progressRoutes);
+
+// Routes du module de gestion des Quiz.
+app.use("/api", quizRoutes);
 
 
 // Gestionnaire centralisé des erreurs.
