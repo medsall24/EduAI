@@ -11,6 +11,7 @@ import categoryRoutes from "./modules/categories/category.routes.js";
 import userRoutes from "./modules/users/user.routes.js";
 import progressRoutes from "./modules/progress/progress.routes.js";
 import quizRoutes from "./modules/quizzes/quiz.routes.js";
+import aiRoutes from "./modules/ai/ai.routes.js";
 
 import { errorHandler } from "./middlewares/error.middleware.js";
 // Création de l'application Express.
@@ -60,6 +61,8 @@ app.use("/api", progressRoutes);
 // Routes du module de gestion des Quiz.
 app.use("/api", quizRoutes);
 
+// Routes du module d'intelligence artificielle.
+app.use("/api/ai", aiRoutes);
 
 // Gestionnaire centralisé des erreurs.
 // Il doit etre enregistré après toutes les routes.

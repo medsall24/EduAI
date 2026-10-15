@@ -28,6 +28,8 @@ model Tenant {
   options     Option[]
   quizAttempts  QuizAttempt[]
   quizAnswers   QuizAnswer[] @relation("TenantQuizAnswers")
+  aiConversations AIConversation[]
+  aiUsage         AIUsage[]
 }
 
 model Role {
@@ -81,6 +83,8 @@ model User {
   sessions      Session[]
   progress      Progress[]
   quizAttempts  QuizAttempt[]
+  aiConversations AIConversation[]
+  aiUsage         AIUsage[]
 
   tenant        Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   role          Role?        @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Restrict)
@@ -368,7 +372,56 @@ model QuizAnswer {
   @@index([tenantId, optionId])
 }
 
+model AIConversation {
+  id         String   @id @default(uuid())
+  tenantId   String
+  userId     String
+  title      String   @default("Nouvelle conversation")
+  isArchived Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user     User        @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+  messages AIMessage[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, userId, updatedAt])
+}
+
+model AIMessage {
+  id             String        @id @default(uuid())
+  tenantId       String
+  conversationId String
+  role           AIMessageRole
+  content        String        @db.Text
+  provider       AIProvider?
+  model          String?
+  createdAt      DateTime      @default(now())
+
+  conversation AIConversation @relation(fields: [tenantId, conversationId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, conversationId, createdAt])
+}
+
+model AIUsage {
+  id           String          @id @default(uuid())
+  tenantId     String
+  userId       String
+  provider     AIProvider
+  model        String
+  inputTokens  Int?
+  outputTokens Int?
+  durationMs   Int?
+  status       AIRequestStatus
+  createdAt    DateTime        @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [tenantId, userId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, userId, createdAt])
+  @@index([tenantId, provider, createdAt])
+}
 
 
 
@@ -416,7 +469,21 @@ enum QuestionType {
   TRUE_FALSE
 }
 
+enum AIMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
 
+enum AIProvider {
+  GEMINI
+  OPENROUTER
+}
+
+enum AIRequestStatus {
+  SUCCESS
+  ERROR
+}
 
 
 
