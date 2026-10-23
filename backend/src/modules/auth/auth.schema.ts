@@ -28,11 +28,7 @@ export const registerSchema = z.object({
     .min(8, "Password must contain at least 8 characters")
     .max(128),
 
-  roleName: z.enum([
-    "TENANT_ADMIN",
-    "FORMATEUR",
-    "APPRENANT",
-  ]),
+  roleName: z.literal("APPRENANT"),
 });
 
 export type RegisterInput = z.infer<

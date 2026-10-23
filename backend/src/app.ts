@@ -1,4 +1,8 @@
+
 import express from "express";
+import helmet from "helmet";
+import cors from "cors";
+import rateLimit from "express-rate-limit";
 
 import authRoutes from "./modules/auth/auth.routes.js";
 import enrollmentRoutes from "./modules/enrollment/enrollment.routes.js";
@@ -14,13 +18,46 @@ import quizRoutes from "./modules/quizzes/quiz.routes.js";
 import aiRoutes from "./modules/ai/ai.routes.js";
 
 import { errorHandler } from "./middlewares/error.middleware.js";
-// Création de l'application Express.
+
 const app = express();
 
-// Middleware permettant à Express de lire les requètes JSON.
-app.use(express.json());
+// Sécurité des en-têtes HTTP.
+app.use(helmet());
 
-// Route de controle permettant de vérifier que l'API fonctionne.
+// CORS : les origines seront configurées via CORS_ORIGINS.
+// Sans Origin, les clients non-navigateurs (ex. Postman) restent utilisables.
+const allowedOrigins = (process.env.CORS_ORIGINS ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+     callback(null, false);    },
+    credentials: true,
+  }),
+);
+
+// Limitation de la taille des corps JSON.
+app.use(express.json({ limit: "1mb" }));
+
+// Limitation générale du nombre de requêtes.
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 300,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+  }),
+);
+
+// Route de santé.
 app.get("/", (_req, res) => {
   res.json({
     success: true,
@@ -37,35 +74,26 @@ app.use("/api/users", userRoutes);
 // Routes liées aux inscriptions aux formations.
 app.use("/api/enrollments", enrollmentRoutes);
 
-// Routes de test du contole d'accès RBAC.
+// Routes RBAC.
 app.use("/api/rbac", rbacRoutes);
 
-// Routes du module formation.
+// Routes du module formations.
 app.use("/api/formations", formationRoutes);
 
-// Routes du module category management.
+// Routes du module catégories.
 app.use("/api/categories", categoryRoutes);
 
-// Routes du module management.
+// Routes des modules, leçons, ressources, progression et quiz.
 app.use("/api", moduleRoutes);
-
-// Routes du lesson management.
 app.use("/api", lessonRoutes);
-
-// Routes Resource management.
 app.use("/api", resourceRoutes);
-
-// Routes du module de gestion de la progression.
 app.use("/api", progressRoutes);
-
-// Routes du module de gestion des Quiz.
 app.use("/api", quizRoutes);
 
-// Routes du module d'intelligence artificielle.
+// Routes du module IA.
 app.use("/api/ai", aiRoutes);
 
-// Gestionnaire centralisé des erreurs.
-// Il doit etre enregistré après toutes les routes.
+// Gestionnaire central des erreurs, après les routes.
 app.use(errorHandler);
 
 export default app;

@@ -570,7 +570,7 @@ export async function updateQuestion(
     }
   }
 
-  
+
   const question = await prisma.question.update({
     where: {
       id: questionId,
@@ -906,7 +906,7 @@ export async function startQuizAttempt(
 ) {
   const tenantId = ensureTenantContext(context);
 
-  
+
 if (!context.roleId || context.systemRole === "SUPER_ADMIN") {
   throw new AppError(403, "Only enrolled learners can start a quiz");
 }
@@ -1210,6 +1210,7 @@ export async function submitQuizAttempt(
         data: answersToCreate,
       });
     }
+
 
     return tx.quizAttempt.findFirstOrThrow({
       where: {

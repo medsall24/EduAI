@@ -162,6 +162,12 @@ const permissions = [
     name: "enrollment.delete",
     description: "Supprimer une inscription",
   },
+
+    // Permission d'utilisation de l'assistant IA.
+  {
+    name: "ai.chat",
+    description: "Utiliser l'assistant pédagogique IA",
+  },
 ];
 
 // Fonction principale de synchronisation des permissions RBAC.
@@ -221,12 +227,16 @@ const main = async (): Promise<void> => {
       "resource.delete",
 
       "enrollment.read",
+
+      "ai.chat",
     ],
 
     // L'APPRENANT dispose de permissions de consultation
     // et peut créer sa propre inscription.
     APPRENANT: [
       "formation.read",
+
+      "ai.chat",
 
       "category.read",
 

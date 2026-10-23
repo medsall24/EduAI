@@ -10,22 +10,33 @@ import type {
 
 export class UserService {
   /**
-   * Vérifie qu'un rôle existe dans le tenant courant.
-   * Un rôle d'un autre tenant ne peut jamais être attribué.
-   */
-  private async ensureRoleExists(
-    tenantId: string,
-    roleId: string,
-  ): Promise<void> {
-    const role = await prisma.role.findFirst({
-      where: { id: roleId, tenantId },
-      select: { id: true },
-    });
+ * Vérifie qu'un rôle existe dans le tenant courant
+ * et interdit l'attribution de TENANT_ADMIN
+ * par les opérations ordinaires de gestion des utilisateurs.
+ */
+private async ensureRoleExists(
+  tenantId: string,
+  roleId: string,
+): Promise<void> {
+  const role = await prisma.role.findFirst({
+    where: { id: roleId, tenantId },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
 
-    if (!role) {
-      throw new AppError(400, "Invalid role for this tenant");
-    }
+  if (!role) {
+    throw new AppError(400, "Invalid role for this tenant");
   }
+
+  if (role.name === "TENANT_ADMIN") {
+    throw new AppError(
+      403,
+      "TENANT_ADMIN cannot be assigned through ordinary user management",
+    );
+  }
+}
 
   /**
    * Crée un utilisateur dans le tenant courant.
