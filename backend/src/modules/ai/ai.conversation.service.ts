@@ -214,15 +214,94 @@ const AI_SYSTEM_INSTRUCTION =
 // Nombre maximal de messages précédents chargés pour fournir le contexte à l'IA.
 const MAX_HISTORY_MESSAGES = 20;
 
-// Enregistre un message utilisateur, appelle l'IA et sauvegarde sa réponse.
+
+/**
+ * Enregistre l'échec d'une requête auprès du fournisseur IA,
+ * puis renvoie une erreur contrôlée destinée au client.
+ *
+ * Cette fonction :
+ * 1. Récupère un message d'erreur exploitable pour les logs.
+ * 2. Journalise l'échec côté serveur.
+ * 3. Tente d'enregistrer l'utilisation avec le statut ERROR.
+ * 4. Ignore une éventuelle erreur de journalisation pour
+ *    préserver l'erreur initiale du fournisseur.
+ * 5. Retourne une erreur HTTP 502 sans exposer les détails internes.
+ *
+ * @param tenantId Identifiant du tenant concerné.
+ * @param userId Identifiant de l'utilisateur authentifié.
+ * @param provider Fournisseur IA utilisé : Gemini ou OpenRouter.
+ * @param model Modèle IA utilisé, ou valeur de remplacement si
+ *              la configuration n'a pas pu être récupérée.
+ * @param startedAt Horodatage du début du traitement, en millisecondes.
+ * @param error Erreur initiale rencontrée pendant la requête IA.
+ * @returns Une promesse qui se termine toujours par une erreur contrôlée.
+ */
+async function recordAIProviderFailure(
+  tenantId: string,
+  userId: string,
+  provider: "gemini" | "openrouter",
+  model: string,
+  startedAt: number,
+  error: unknown,
+): Promise<never> {
+  // Convertit l'erreur en message lisible sans supposer son type.
+  const errorMessage =
+    error instanceof Error ? error.message : "Unknown error";
+
+  // Journalise les informations utiles au diagnostic côté serveur.
+  // Ces détails ne sont pas directement renvoyés au client.
+  console.error("[EduAI AI] Provider request failed:", {
+    provider,
+    error: errorMessage,
+  });
+
+  try {
+    // Enregistre la tentative échouée dans les statistiques d'utilisation.
+    await prisma.aIUsage.create({
+      data: {
+        tenantId,
+        userId,
+
+        // Convertit le nom du fournisseur vers l'enum Prisma correspondant.
+        provider:
+          provider === "gemini"
+            ? AIProvider.GEMINI
+            : AIProvider.OPENROUTER,
+
+        // Conserve le modèle utilisé ou la valeur de remplacement fournie.
+        model,
+
+        // Calcule la durée totale écoulée depuis le début du traitement.
+        durationMs: Date.now() - startedAt,
+
+        // Indique que la requête IA n'a pas abouti.
+        status: AIRequestStatus.ERROR,
+      },
+    });
+  } catch {
+    // La journalisation ne doit pas remplacer l'erreur initiale.
+    // L'échec d'écriture dans la table d'utilisation est donc ignoré ici.
+  }
+
+  // Renvoie un message contrôlé au client sans exposer les détails internes.
+  throw new AppError(502, "AI provider request failed");
+}
+
+
+
+/**
+ * Enregistre le message utilisateur, appelle le fournisseur IA,
+ * sauvegarde la réponse et journalise l'utilisation.
+ */
 export async function sendMessage(
   context: AIUserContext,
   conversationId: string,
   input: SendMessageInput,
 ) {
+  // Vérifie le contexte de sécurité et récupère le tenant courant.
   const tenantId = ensureTenantContext(context);
 
-  // Vérifie que la conversation appartient au tenant et à l'utilisateur.
+  // Vérifie que la conversation appartient à l'utilisateur authentifié.
   const conversation = await prisma.aIConversation.findFirst({
     where: {
       id: conversationId,
@@ -235,11 +314,12 @@ export async function sendMessage(
     },
   });
 
+  // Ne révèle pas l'existence d'une conversation inaccessible.
   if (!conversation) {
     throw new AppError(404, "Conversation not found");
   }
 
-  // Enregistre le message de l'utilisateur dans PostgreSQL.
+  // Enregistre le message utilisateur avant l'appel au fournisseur IA.
   const userMessage = await prisma.aIMessage.create({
     data: {
       tenantId,
@@ -255,155 +335,147 @@ export async function sendMessage(
     },
   });
 
-  // Démarre la mesure du temps de traitement de la requête.
+  // Démarre le chronométrage et récupère le fournisseur configuré.
   const startedAt = Date.now();
-
-  // Récupère le fournisseur configuré pour cette requête.
   const provider = aiConfig.provider;
+
+  // Vérifie la configuration avant de poursuivre.
   let model: string;
 
   try {
-    // Vérifie la configuration du fournisseur et récupère son modèle.
     model = getActiveAIConfig().model;
-
-    // Charge les messages récents pour conserver le contexte de la conversation.
-    const history = await prisma.aIMessage.findMany({
-      where: {
-        tenantId,
-        conversationId,
-        // Seuls les messages utilisateur et assistant sont transmis à l'IA.
-        role: {
-          in: [AIMessageRole.USER, AIMessageRole.ASSISTANT],
-        },
-      },
-      // Charge les messages les plus récents en premier.
-      orderBy: {
-        createdAt: "desc",
-      },
-      take: MAX_HISTORY_MESSAGES,
-      select: {
-        role: true,
-        content: true,
-      },
-    });
-
-    // Remet l'historique dans l'ordre chronologique et convertit les rôles.
-    const messages: AIMessage[] = history.reverse().map((message) => ({
-      role: message.role === AIMessageRole.ASSISTANT ? "assistant" : "user",
-      content: message.content,
-    }));
-
-    // Envoie l'historique au fournisseur IA actif.
-    const response = await askAI(messages, AI_SYSTEM_INSTRUCTION);
-    const durationMs = Date.now() - startedAt;
-
-    // Enregistre la réponse générée par l'assistant.
-    const assistantMessage = await prisma.aIMessage.create({
-      data: {
-        tenantId,
-        conversationId,
-        role: AIMessageRole.ASSISTANT,
-        content: response.content,
-        // Convertit le fournisseur en valeur de l'enum Prisma.
-        provider:
-          response.provider === "gemini"
-            ? AIProvider.GEMINI
-            : AIProvider.OPENROUTER,
-        model: response.model,
-      },
-      select: {
-        id: true,
-        role: true,
-        content: true,
-        provider: true,
-        model: true,
-        createdAt: true,
-      },
-    });
-
-    // Enregistre les statistiques de succès et actualise la conversation.
-    await prisma.$transaction([
-      prisma.aIUsage.create({
-        data: {
-          tenantId,
-          userId: context.userId,
-          provider:
-            response.provider === "gemini"
-              ? AIProvider.GEMINI
-              : AIProvider.OPENROUTER,
-          model: response.model,
-          durationMs,
-          status: AIRequestStatus.SUCCESS,
-        },
-      }),
-      prisma.aIConversation.update({
-        where: {
-          tenantId_id: {
-            tenantId,
-            id: conversationId,
-          },
-        },
-        data: {
-          updatedAt: new Date(),
-          // Utilise le début du premier message comme titre provisoire.
-          ...(conversation.title === "Nouvelle conversation"
-            ? {
-                title: input.content.slice(0, 60).trim(),
-              }
-            : {}),
-        },
-      }),
-    ]);
-
-    // Retourne le message envoyé, la réponse et les informations d'utilisation.
-    return {
-      conversationId,
-      userMessage,
-      assistantMessage,
-      usage: {
-        provider: response.provider,
-        model: response.model,
-        durationMs,
-      },
-    };
   } catch (error: unknown) {
-  const errorMessage =
-    error instanceof Error ? error.message : "Unknown error";
-
-  console.error("[EduAI AI] Provider request failed:", {
-    provider,
-    error: errorMessage,
-  });
-    // Calcule la durée même lorsque le traitement échoue.
-    const durationMs = Date.now() - startedAt;
-
-    try {
-      // Enregistre l'échec sans exposer les détails sensibles au client.
-      const fallbackModel =
-        typeof model! === "string"
-          ? model!
-          : provider === "gemini"
-            ? "unknown"
-            : "unknown";
-
-      await prisma.aIUsage.create({
-        data: {
-          tenantId,
-          userId: context.userId,
-          provider:
-            provider === "gemini"
-              ? AIProvider.GEMINI
-              : AIProvider.OPENROUTER,
-          model: fallbackModel,
-          durationMs,
-          status: AIRequestStatus.ERROR,
-        },
-      });
-    } catch {
-      // Une erreur de journalisation ne remplace pas l'erreur initiale.
-    }
-
-    // Retourne une erreur contrôlée sans divulguer les détails du fournisseur.
-    throw new AppError(502, "AI provider request failed");
+    // Une configuration invalide est traitée comme un échec du service IA.
+    return recordAIProviderFailure(
+      tenantId,
+      context.userId,
+      provider,
+      "unknown",
+      startedAt,
+      error,
+    );
   }
+
+  // Charge l'historique récent de la conversation.
+  // Une erreur PostgreSQL ici reste une erreur de base de données.
+  const history = await prisma.aIMessage.findMany({
+    where: {
+      tenantId,
+      conversationId,
+      role: {
+        in: [AIMessageRole.USER, AIMessageRole.ASSISTANT],
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    take: MAX_HISTORY_MESSAGES,
+    select: {
+      role: true,
+      content: true,
+    },
+  });
+
+  // Remet les messages dans l'ordre chronologique attendu par le modèle.
+  const messages: AIMessage[] = history.reverse().map((message) => ({
+    role: message.role === AIMessageRole.ASSISTANT ? "assistant" : "user",
+    content: message.content,
+  }));
+
+  // Appelle le fournisseur IA dans un bloc isolé.
+  // Seule une erreur de cet appel déclenche la journalisation d'échec IA.
+  let response;
+
+  try {
+    response = await askAI(messages, AI_SYSTEM_INSTRUCTION);
+  } catch (error: unknown) {
+    return recordAIProviderFailure(
+      tenantId,
+      context.userId,
+      provider,
+      model,
+      startedAt,
+      error,
+    );
+  }
+
+  // Calcule la durée de la requête IA réussie.
+  const durationMs = Date.now() - startedAt;
+
+  // Enregistre la réponse de l'assistant.
+  // Une erreur Prisma remonte normalement au middleware d'erreurs.
+  const assistantMessage = await prisma.aIMessage.create({
+    data: {
+      tenantId,
+      conversationId,
+      role: AIMessageRole.ASSISTANT,
+      content: response.content,
+      provider:
+        response.provider === "gemini"
+          ? AIProvider.GEMINI
+          : AIProvider.OPENROUTER,
+      model: response.model,
+    },
+    select: {
+      id: true,
+      role: true,
+      content: true,
+      provider: true,
+      model: true,
+      createdAt: true,
+    },
+  });
+
+  // Enregistre l'utilisation réussie et actualise la conversation.
+  await prisma.$transaction([
+    prisma.aIUsage.create({
+  data: {
+    tenantId,
+    userId: context.userId,
+    provider:
+      response.provider === "gemini"
+        ? AIProvider.GEMINI
+        : AIProvider.OPENROUTER,
+    model: response.model,
+
+    // Enregistre le nombre de tokens consommés.
+    // Une valeur indisponible est conservée sous forme de null.
+    inputTokens: response.inputTokens,
+    outputTokens: response.outputTokens,
+
+    // Enregistre la durée totale de la requête.
+    durationMs,
+
+    // Indique que la requête IA a réussi.
+    status: AIRequestStatus.SUCCESS,
+  },
+}),
+    prisma.aIConversation.update({
+      where: {
+        tenantId_id: {
+          tenantId,
+          id: conversationId,
+        },
+      },
+      data: {
+        updatedAt: new Date(),
+        // Définit le titre à partir du premier message si nécessaire.
+        ...(conversation.title === "Nouvelle conversation"
+          ? { title: input.content.slice(0, 60).trim() }
+          : {}),
+      },
+    }),
+  ]);
+
+  // Retourne les messages et les informations d'utilisation au contrôleur.
+  return {
+    conversationId,
+    userMessage,
+    assistantMessage,
+    usage: {
+      provider: response.provider,
+      model: response.model,
+      durationMs,
+    },
+  };
 }

@@ -82,6 +82,27 @@ if (!user || !user.isActive) {
   return;
 }
 
+// Vérifie la cohérence du contexte SUPER_ADMIN.
+const isValidSuperAdmin =
+  user.systemRole === "SUPER_ADMIN" &&
+  user.tenantId === null &&
+  user.roleId === null;
+
+// Vérifie la cohérence du contexte d'un utilisateur de tenant.
+const isValidTenantUser =
+  user.systemRole === null &&
+  user.tenantId !== null &&
+  user.roleId !== null;
+
+// Refuse tout contexte incohérent.
+if (!isValidSuperAdmin && !isValidTenantUser) {
+  res.status(401).json({
+    success: false,
+    message: "Authentication failed",
+  });
+  return;
+}
+
 // Ajoute le contexte authentifié à la requête Express.
 req.user = {
   userId: user.id,

@@ -11,6 +11,8 @@ interface AIResponse {
   provider: "gemini" | "openrouter";
   model: string;
   content: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
 }
 
 interface GeminiResponse {
@@ -19,6 +21,10 @@ interface GeminiResponse {
       parts?: Array<{ text?: string }>;
     };
   }>;
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+  };
   error?: {
     message?: string;
   };
@@ -30,12 +36,30 @@ interface OpenRouterResponse {
       content?: string | Array<{ type?: string; text?: string }>;
     };
   }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+  };
   error?: {
     message?: string;
   };
 }
 
 const REQUEST_TIMEOUT_MS = 30_000;
+
+// Vérifie et normalise une valeur de consommation de tokens.
+// Retourne null lorsque la valeur est absente ou invalide.
+function normalizeTokenCount(value: unknown): number | null {
+  if (
+    typeof value !== "number" ||
+    !Number.isSafeInteger(value) ||
+    value < 0
+  ) {
+    return null;
+  }
+
+  return value;
+}
 
 async function fetchWithTimeout(
   url: string,
@@ -81,15 +105,27 @@ async function askGemini(
     },
   );
 
-  const data = (await response.json()) as GeminiResponse;
+  let data: GeminiResponse;
 
+try {
+  data = (await response.json()) as GeminiResponse;
+} catch {
   if (!response.ok) {
     throw new Error(
-      `Gemini API error (${response.status}): ${
-        data.error?.message ?? "Request failed"
-      }`,
+      `Gemini API error (${response.status}): Request failed`,
     );
   }
+
+  throw new Error("Gemini returned an invalid JSON response.");
+}
+
+if (!response.ok) {
+  throw new Error(
+    `Gemini API error (${response.status}): ${
+      data.error?.message ?? "Request failed"
+    }`,
+  );
+}
 
   const content = data.candidates?.[0]?.content?.parts
     ?.map((part) => part.text ?? "")
@@ -100,11 +136,19 @@ async function askGemini(
     throw new Error("Gemini returned an empty response.");
   }
 
-  return {
+    return {
     success: true,
     provider: "gemini",
     model: config.model,
     content,
+    // Enregistre le nombre de tokens transmis au modèle.
+    inputTokens: normalizeTokenCount(
+      data.usageMetadata?.promptTokenCount,
+    ),
+    // Enregistre le nombre de tokens générés par le modèle.
+    outputTokens: normalizeTokenCount(
+      data.usageMetadata?.candidatesTokenCount,
+    ),
   };
 }
 
@@ -141,15 +185,27 @@ async function askOpenRouter(
     },
   );
 
-  const data = (await response.json()) as OpenRouterResponse;
+  let data: OpenRouterResponse;
 
+try {
+  data = (await response.json()) as OpenRouterResponse;
+} catch {
   if (!response.ok) {
     throw new Error(
-      `OpenRouter API error (${response.status}): ${
-        data.error?.message ?? "Request failed"
-      }`,
+      `OpenRouter API error (${response.status}): Request failed`,
     );
   }
+
+  throw new Error("OpenRouter returned an invalid JSON response.");
+}
+
+if (!response.ok) {
+  throw new Error(
+    `OpenRouter API error (${response.status}): ${
+      data.error?.message ?? "Request failed"
+    }`,
+  );
+}
 
   const rawContent = data.choices?.[0]?.message?.content;
 
@@ -165,11 +221,15 @@ async function askOpenRouter(
     throw new Error("OpenRouter returned an empty response.");
   }
 
-  return {
+    return {
     success: true,
     provider: "openrouter",
     model: config.model,
     content,
+    // Enregistre le nombre de tokens transmis au modèle.
+    inputTokens: normalizeTokenCount(data.usage?.prompt_tokens),
+    // Enregistre le nombre de tokens générés par le modèle.
+    outputTokens: normalizeTokenCount(data.usage?.completion_tokens),
   };
 }
 
@@ -177,16 +237,19 @@ export async function askAI(
   messages: AIMessage[],
   systemInstruction?: string,
 ): Promise<AIResponse> {
+  // Vérifie qu'au moins un message est fourni.
   if (messages.length === 0) {
     throw new Error("At least one message is required.");
   }
 
+  // Refuse les messages dont le contenu est vide.
   for (const message of messages) {
     if (!message.content.trim()) {
       throw new Error("Messages cannot be empty.");
     }
   }
 
+  // Sélectionne le fournisseur configuré.
   if (aiConfig.provider === "gemini") {
     return askGemini(messages, systemInstruction);
   }

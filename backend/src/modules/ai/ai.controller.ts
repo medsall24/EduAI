@@ -1,4 +1,5 @@
-
+// Service métier chargé de calculer les recommandations pédagogiques.
+import { getPedagogicalRecommendations } from "./ai.recommendation.service.js";
 import type { Request, Response, NextFunction } from "express";
 
 import {
@@ -218,6 +219,35 @@ export async function sendMessageController(
       data: result,
     });
   } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Retourne les recommandations pédagogiques personnalisées
+ * de l'apprenant authentifié.
+ *
+ * Le service métier vérifie le rôle et applique les filtres
+ * nécessaires à l'isolation des données par tenant.
+ */
+export async function getRecommendationsController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    // Réutilise le contexte construit à partir de l'utilisateur authentifié.
+    const recommendations = await getPedagogicalRecommendations(
+      getAIUserContext(req),
+    );
+
+    // Retourne les recommandations calculées par le backend.
+    return res.status(200).json({
+      success: true,
+      data: recommendations,
+    });
+  } catch (error) {
+    // Délègue les erreurs au gestionnaire central d'Express.
     next(error);
   }
 }

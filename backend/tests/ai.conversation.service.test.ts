@@ -187,11 +187,13 @@ it("enregistre la réponse IA et l'utilisation en cas de succès", async () => {
     .mockResolvedValueOnce(assistantMessage);
 
   askAI.mockResolvedValueOnce({
-    success: true,
-    provider: "gemini",
-    model: "test-model",
-    content: "Une variable stocke une valeur en mémoire.",
-  });
+  success: true,
+  provider: "gemini",
+  model: "test-model",
+  content: "Une variable stocke une valeur en mémoire.",
+  inputTokens: 120,
+  outputTokens: 45,
+});
 
   usageCreate.mockResolvedValueOnce({ id: "usage-test" });
   conversationUpdate.mockResolvedValueOnce({
@@ -209,13 +211,15 @@ it("enregistre la réponse IA et l'utilisation en cas de succès", async () => {
   expect(result.usage.model).toBe("test-model");
 
   expect(usageCreate).toHaveBeenCalledWith({
-    data: expect.objectContaining({
-      tenantId: context.tenantId,
-      userId: context.userId,
-      status: "SUCCESS",
-      model: "test-model",
-    }),
-  });
+  data: expect.objectContaining({
+    tenantId: context.tenantId,
+    userId: context.userId,
+    status: "SUCCESS",
+    model: "test-model",
+    inputTokens: 120,
+    outputTokens: 45,
+  }),
+});
 
   expect(conversationUpdate).toHaveBeenCalledOnce();
 });
@@ -239,5 +243,30 @@ it("refuse d'envoyer un message si la conversation est inaccessible", async () =
   expect(usageCreate).not.toHaveBeenCalled();
 });
 
+
+  it("ne transforme pas une erreur de chargement de l'historique en erreur IA", async () => {
+    // Simule une erreur PostgreSQL lors du chargement de l'historique.
+    const databaseError = new Error("Erreur PostgreSQL simulée");
+    messageFindMany.mockRejectedValueOnce(databaseError);
+
+    // Vérifie que le service laisse remonter l'erreur de base de données.
+    await expect(
+      sendMessage(context, conversationId, {
+        content: "Explique les variables en programmation.",
+      }),
+    ).rejects.toBe(databaseError);
+
+    // Le fournisseur IA ne doit pas être appelé.
+    expect(askAI).not.toHaveBeenCalled();
+
+    // Aucune utilisation IA ne doit être enregistrée comme un échec fournisseur.
+    expect(usageCreate).not.toHaveBeenCalled();
+
+    // Aucune réponse assistant ne doit être enregistrée.
+    expect(messageCreate).toHaveBeenCalledOnce();
+
+    // La conversation ne doit pas être actualisée.
+    expect(conversationUpdate).not.toHaveBeenCalled();
+  });
 
 });
