@@ -1,5 +1,6 @@
 // Service métier chargé de calculer les recommandations pédagogiques.
 import { getPedagogicalRecommendations } from "./ai.recommendation.service.js";
+import { getLearnerPerformance } from "./ai.performance.service.js";
 import type { Request, Response, NextFunction } from "express";
 
 import {
@@ -248,6 +249,34 @@ export async function getRecommendationsController(
     });
   } catch (error) {
     // Délègue les erreurs au gestionnaire central d'Express.
+    next(error);
+  }
+}
+/**
+ * Retourne l'analyse des performances pédagogiques
+ * de l'apprenant authentifié.
+ *
+ * Le service métier vérifie le rôle réel de l'utilisateur,
+ * applique l'isolation par tenant et analyse les tentatives terminées.
+ */
+export async function getPerformanceController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    // Construit le contexte exclusivement à partir du JWT authentifié.
+    const performance = await getLearnerPerformance(
+      getAIUserContext(req),
+    );
+
+    // Retourne les statistiques pédagogiques de l'apprenant.
+    return res.status(200).json({
+      success: true,
+      data: performance,
+    });
+  } catch (error) {
+    // Transmet les erreurs au gestionnaire central d'Express.
     next(error);
   }
 }

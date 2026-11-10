@@ -18,6 +18,7 @@ import {
   deleteConversationController,
   sendMessageController,
   getRecommendationsController,
+  getPerformanceController,
 } from "./ai.controller.js";
 
 // Initialise le routeur Express du module IA.
@@ -84,6 +85,15 @@ router.get(
   authenticate,
   requirePermission("ai.chat"),
   getRecommendationsController,
+);
+
+// Retourne l'analyse des performances pédagogiques
+// de l'apprenant authentifié.
+router.get(
+  "/performance",
+  authenticate,
+  requirePermission("ai.chat"),
+  getPerformanceController,
 );
 
 // Exporte le routeur pour son intégration dans l'application Express.

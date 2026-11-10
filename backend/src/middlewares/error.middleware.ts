@@ -1,11 +1,12 @@
+
 import { Prisma } from "../generated/prisma/client.js";
 import type { ErrorRequestHandler } from "express";
 import jwt from "jsonwebtoken";
 import { ZodError } from "zod";
 import { AppError } from "../errors/app-error.js";
 
-// Décrire la structure des erreurs produites par le parseur JSON
-// sans dépendre d'un type interne de la bibliothèque body-parser.
+// Décrit les erreurs produites par le parseur JSON
+// sans dépendre d'un type interne de body-parser.
 type HttpParserError = Error & {
   status?: number;
   statusCode?: number;
@@ -13,7 +14,7 @@ type HttpParserError = Error & {
   expose?: boolean;
 };
 
-// Gérer centralement les erreurs de l'API sans divulguer
+// Gère centralement les erreurs de l'API sans divulguer
 // les stack traces ni les détails internes au client.
 export const errorHandler: ErrorRequestHandler = (
   error: unknown,
@@ -54,7 +55,7 @@ export const errorHandler: ErrorRequestHandler = (
     return;
   }
 
-  // Reconnaître les erreurs générées par le parseur JSON d'Express.
+  // Reconnaît les erreurs générées par le parseur JSON d'Express.
   if (error instanceof Error) {
     const parserError = error as HttpParserError;
 
@@ -76,8 +77,7 @@ export const errorHandler: ErrorRequestHandler = (
       return;
     }
 
-    // Traiter les autres erreurs de requête connues du parseur
-    // sans considérer toutes les erreurs inconnues comme client.
+    // Traite les erreurs de taille de requête connues.
     if (
       parserError.status === 400 &&
       parserError.type === "request.size.invalid"
@@ -90,16 +90,7 @@ export const errorHandler: ErrorRequestHandler = (
     }
   }
 
-  // Journaliser les erreurs inattendues côté serveur uniquement.
-  console.error(error);
-
-  // Ne pas exposer la stack trace ni les détails internes au client.
-  res.status(500).json({
-    success: false,
-    message: "Internal server error",
-  });
-
-    // Traiter les erreurs Prisma connues sans exposer les détails internes.
+  // Traite les erreurs Prisma connues avant toute réponse générique.
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     switch (error.code) {
       case "P2002":
@@ -127,4 +118,13 @@ export const errorHandler: ErrorRequestHandler = (
         break;
     }
   }
+
+  // Journalise les erreurs inattendues côté serveur uniquement.
+  console.error(error);
+
+  // Ne divulgue jamais la stack trace ni les détails internes.
+  res.status(500).json({
+    success: false,
+    message: "Internal server error",
+  });
 };
