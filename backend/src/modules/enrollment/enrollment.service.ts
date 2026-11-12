@@ -1,5 +1,6 @@
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../errors/app-error.js";
+import { enqueueLearningPathEvent } from "../ai/learning-path-outbox.service.js";
 import type {
   CreateEnrollmentInput,
   UpdateEnrollmentInput,
@@ -118,14 +119,28 @@ export class EnrollmentService {
       );
     }
 
-    return prisma.enrollment.create({
-      data: {
-        tenantId,
-        userId: input.userId,
-        formationId: input.formationId,
-        status: "ACTIVE",
-      },
-    });
+    return prisma.$transaction(async (tx) => {
+  const enrollment = await tx.enrollment.create({
+    data: {
+      tenantId,
+      userId: input.userId,
+      formationId: input.formationId,
+      status: "ACTIVE",
+    },
+  });
+
+  await enqueueLearningPathEvent(tx, {
+    tenantId,
+    eventType: "ENROLLMENT_ACTIVATED",
+    aggregateId: enrollment.id,
+    payload: {
+      userId: enrollment.userId,
+      formationId: enrollment.formationId,
+    },
+  });
+
+  return enrollment;
+});
   }
 
   /**
@@ -233,15 +248,38 @@ export class EnrollmentService {
           new Date()
         : null;
 
-    return prisma.enrollment.update({
-      where: {
-        id,
-      },
-      data: {
-        status: input.status,
-        completedAt,
+    return prisma.$transaction(async (tx) => {
+  const enrollment = await tx.enrollment.update({
+    where: {
+      id,
+    },
+    data: {
+      status: input.status,
+      completedAt,
+    },
+  });
+
+  if (existingEnrollment.status !== input.status) {
+    const eventType =
+      input.status === "ACTIVE"
+        ? "ENROLLMENT_ACTIVATED"
+        : input.status === "CANCELLED"
+          ? "ENROLLMENT_CANCELLED"
+          : "ENROLLMENT_COMPLETED";
+
+    await enqueueLearningPathEvent(tx, {
+      tenantId,
+      eventType,
+      aggregateId: enrollment.id,
+      payload: {
+        userId: enrollment.userId,
+        formationId: enrollment.formationId,
       },
     });
+  }
+
+  return enrollment;
+});
   }
 
   /**
@@ -266,10 +304,22 @@ export class EnrollmentService {
       );
     }
 
-    await prisma.enrollment.delete({
-      where: {
-        id,
-      },
-    });
+    await prisma.$transaction(async (tx) => {
+  await tx.enrollment.delete({
+    where: {
+      id,
+    },
+  });
+
+  await enqueueLearningPathEvent(tx, {
+    tenantId,
+    eventType: "ENROLLMENT_DELETED",
+    aggregateId: existingEnrollment.id,
+    payload: {
+      userId: existingEnrollment.userId,
+      formationId: existingEnrollment.formationId,
+    },
+  });
+});
   }
 }

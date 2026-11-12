@@ -1,7 +1,7 @@
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../errors/app-error.js";
 import type { UpdateProgressInput } from "./progress.schema.js";
-
+import { enqueueLearningPathEvent } from "../ai/learning-path-outbox.service.js";
 /**
  * Service responsable de la gestion de la progression
  * des apprenants dans les formations.
@@ -58,99 +58,83 @@ export class ProgressService {
    * La progression existante est mise à jour si elle existe.
    * Sinon, un nouvel enregistrement est créé.
    */
-  async updateProgress(
-    tenantId: string,
-    userId: string,
-    formationId: string,
-    input: UpdateProgressInput,
-  ) {
-    /**
-     * Vérifie que l'utilisateur possède une inscription
-     * active dans la formation.
-     */
-    await this.getEnrollment(
+async updateProgress(
+  tenantId: string,
+  userId: string,
+  formationId: string,
+  input: UpdateProgressInput,
+) {
+  await this.getEnrollment(
+    tenantId,
+    userId,
+    formationId,
+  );
+
+  const lesson = await prisma.lesson.findFirst({
+    where: {
+      id: input.lessonId,
+      tenantId,
+      module: {
+        formationId,
+      },
+    },
+  });
+
+  if (!lesson) {
+    throw new AppError(
+      404,
+      "Lesson not found in this formation",
+    );
+  }
+
+  const existingProgress = await prisma.progress.findFirst({
+    where: {
       tenantId,
       userId,
-      formationId,
-    );
+      lessonId: input.lessonId,
+    },
+  });
 
-    /**
-     * Vérifie que la leçon appartient bien à la formation
-     * et au tenant courant.
-     */
-    const lesson = await prisma.lesson.findFirst({
-      where: {
-        id: input.lessonId,
-        tenantId,
-        module: {
-          formationId,
-        },
-      },
-    });
+  const completedAt = input.isCompleted
+    ? existingProgress?.completedAt ?? new Date()
+    : null;
 
-    if (!lesson) {
-      throw new AppError(
-        404,
-        "Lesson not found in this formation",
-      );
-    }
+  return prisma.$transaction(async (tx) => {
+    const progress = existingProgress
+      ? await tx.progress.update({
+          where: {
+            id: existingProgress.id,
+          },
+          data: {
+            isCompleted: input.isCompleted,
+            completedAt,
+          },
+        })
+      : await tx.progress.create({
+          data: {
+            tenantId,
+            userId,
+            formationId,
+            lessonId: input.lessonId,
+            isCompleted: input.isCompleted,
+            completedAt,
+          },
+        });
 
-    /**
-     * Recherche une progression existante pour cette leçon.
-     *
-     * La contrainte unique définie dans Prisma garantit
-     * qu'un utilisateur ne possède qu'une seule progression
-     * pour une même leçon dans un tenant.
-     */
-    const existingProgress =
-      await prisma.progress.findFirst({
-        where: {
-          tenantId,
-          userId,
-          lessonId: input.lessonId,
-        },
-      });
-
-    /**
-     * Détermine la date de complétion.
-     *
-     * Elle est enregistrée uniquement lorsque la leçon
-     * passe à l'état terminé.
-     */
-    const completedAt = input.isCompleted
-      ? existingProgress?.completedAt ?? new Date()
-      : null;
-
-    /**
-     * Mise à jour de la progression existante.
-     */
-    if (existingProgress) {
-      return prisma.progress.update({
-        where: {
-          id: existingProgress.id,
-        },
-        data: {
-          isCompleted: input.isCompleted,
-          completedAt,
-        },
-      });
-    }
-
-    /**
-     * Création d'une nouvelle progression lorsque
-     * l'apprenant consulte cette leçon pour la première fois.
-     */
-    return prisma.progress.create({
-      data: {
-        tenantId,
+    await enqueueLearningPathEvent(tx, {
+      tenantId,
+      eventType: "PROGRESS_UPDATED",
+      aggregateId: progress.id,
+      payload: {
         userId,
         formationId,
-        lessonId: input.lessonId,
-        isCompleted: input.isCompleted,
-        completedAt,
       },
     });
-  }
+
+    return progress;
+  });
+}
+
 
     /**
    * Récupère la progression globale d'un apprenant

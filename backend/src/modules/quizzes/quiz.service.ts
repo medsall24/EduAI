@@ -1,5 +1,6 @@
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../errors/app-error.js";
+import { enqueueLearningPathEvent } from "../ai/learning-path-outbox.service.js";
 import type {
   CreateOptionInput,
   UpdateOptionInput,
@@ -1205,11 +1206,15 @@ export async function submitQuizAttempt(
       })),
     );
 
-    if (answersToCreate.length > 0) {
-      await tx.quizAnswer.createMany({
-        data: answersToCreate,
-      });
-    }
+    await enqueueLearningPathEvent(tx, {
+  tenantId,
+  eventType: "QUIZ_SUBMITTED",
+  aggregateId: attemptId,
+  payload: {
+    userId: context.userId,
+    attemptId,
+  },
+});
 
 
     return tx.quizAttempt.findFirstOrThrow({

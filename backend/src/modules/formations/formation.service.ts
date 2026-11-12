@@ -1,5 +1,6 @@
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../errors/app-error.js";
+import { enqueueLearningPathEvent } from "../ai/learning-path-outbox.service.js";
 import type {
   CreateFormationInput,
   UpdateFormationInput,
@@ -230,6 +231,7 @@ export const updateFormation = async (
       },
       select: {
         id: true,
+        status: true,
       },
     });
 
@@ -262,7 +264,8 @@ export const updateFormation = async (
     );
   }
 
-  return prisma.formation.update({
+  return prisma.$transaction(async (tx) => {
+  const formation = await tx.formation.update({
     where: {
       tenantId_id: {
         tenantId: currentTenantId,
@@ -304,6 +307,23 @@ export const updateFormation = async (
       },
     },
   });
+
+  if (
+    existingFormation.status !== "PUBLISHED" &&
+    formation.status === "PUBLISHED"
+  ) {
+    await enqueueLearningPathEvent(tx, {
+      tenantId: currentTenantId,
+      eventType: "FORMATION_PUBLISHED",
+      aggregateId: formation.id,
+      payload: {
+        formationId: formation.id,
+      },
+    });
+  }
+
+  return formation;
+});
 };
 
 export const deleteFormation = async (
