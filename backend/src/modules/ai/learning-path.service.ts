@@ -159,12 +159,34 @@ export async function generateLearningPath(
       );
     }
 
-    const existingPath = await tx.learningPath.findFirst({
+    
+const existingPath = await tx.learningPath.findFirst({
+  where: {
+    tenantId,
+    userId: context.userId,
+    formationId,
+    status: {
+      in: ["ACTIVE", "ARCHIVED"],
+    },
+  },
+  include: {
+    steps: {
+      orderBy: {
+        position: "asc",
+      },
+    },
+  },
+});
+
+if (existingPath) {
+  if (existingPath.status === "ARCHIVED") {
+    return tx.learningPath.update({
       where: {
-        tenantId,
-        userId: context.userId,
-        formationId,
+        id: existingPath.id,
+      },
+      data: {
         status: "ACTIVE",
+        completedAt: null,
       },
       include: {
         steps: {
@@ -172,12 +194,19 @@ export async function generateLearningPath(
             position: "asc",
           },
         },
+        formation: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
       },
     });
+  }
 
-    if (existingPath) {
-      return existingPath;
-    }
+  return existingPath;
+}
+
 
     const lessons = enrollment.formation.modules.flatMap((module) =>
       module.lessons.map((lesson) => ({
@@ -197,47 +226,57 @@ export async function generateLearningPath(
 
     const allCompleted = lessons.every((lesson) => lesson.isCompleted);
 
-    const path = await tx.learningPath.create({
-      data: {
-        tenantId,
-        userId: context.userId,
-        formationId,
-        status: allCompleted ? "COMPLETED" : "ACTIVE",
-        generationVersion: 1,
-        completedAt: allCompleted ? new Date() : null,
-        steps: {
-          create: lessons.map((lesson, index) => ({
-            tenantId,
-            lessonId: lesson.id,
-            position: index + 1,
-            titleSnapshot: lesson.title,
-            objective:
-              lesson.description?.trim() ||
-              `Étudier et comprendre la leçon : ${lesson.title}`,
-            stepType: "LESSON",
-            recommendationReason: "Étape générée à partir de l'ordre pédagogique de la formation.",
-            status: lesson.isCompleted
-              ? "COMPLETED"
-              : "PENDING",
-          })),
-        },
-      },
-      include: {
-        steps: {
-          orderBy: {
-            position: "asc",
-          },
-        },
-        formation: {
-          select: {
-            id: true,
-            title: true,
-          },
-        },
-      },
-    });
+    
+const path = await tx.learningPath.create({
+  data: {
+    tenantId,
+    userId: context.userId,
+    formationId,
+    status: allCompleted ? "COMPLETED" : "ACTIVE",
+    generationVersion: 1,
+    completedAt: allCompleted ? new Date() : null,
+  },
+});
 
-    return path;
+await tx.learningPathStep.createMany({
+  data: lessons.map((lesson, index) => ({
+    tenantId,
+    learningPathId: path.id,
+    lessonId: lesson.id,
+    position: index + 1,
+    titleSnapshot: lesson.title,
+    objective:
+      lesson.description?.trim() ||
+      `Étudier et comprendre la leçon : ${lesson.title}`,
+    stepType: "LESSON",
+    recommendationReason:
+      "Étape générée à partir de l'ordre pédagogique de la formation.",
+    status: lesson.isCompleted ? "COMPLETED" : "PENDING",
+  })),
+});
+
+const createdPath = await tx.learningPath.findFirstOrThrow({
+  where: {
+    id: path.id,
+    tenantId,
+  },
+  include: {
+    steps: {
+      orderBy: {
+        position: "asc",
+      },
+    },
+    formation: {
+      select: {
+        id: true,
+        title: true,
+      },
+    },
+  },
+});
+
+return createdPath;
+
   });
 }
 

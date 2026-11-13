@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => {
 
     learningPathStep: {
       create: vi.fn(),
+      createMany: vi.fn(),
       update: vi.fn(),
       deleteMany: vi.fn(),
       findFirst: vi.fn(),
@@ -57,6 +58,8 @@ const mocks = vi.hoisted(() => {
 
     learningPathStepCreate:
       transactionClient.learningPathStep.create,
+    learningPathStepCreateMany:
+      transactionClient.learningPathStep.createMany,
     learningPathStepUpdate:
       transactionClient.learningPathStep.update,
     learningPathStepDeleteMany:
@@ -169,11 +172,14 @@ describe("Personalized learning path service", () => {
     mocks.learningPathFindFirst.mockResolvedValue(null);
     mocks.learningPathFindFirstOrThrow.mockResolvedValue(null);
 
-    mocks.learningPathCreate.mockResolvedValue(null);
+    mocks.learningPathCreate.mockResolvedValue({
+  id: "path-1",
+});
     mocks.learningPathUpdate.mockResolvedValue(null);
     mocks.learningPathUpdateMany.mockResolvedValue({ count: 0 });
 
     mocks.learningPathStepCreate.mockResolvedValue(null);
+    mocks.learningPathStepCreateMany.mockResolvedValue({ count: 0 });
     mocks.learningPathStepUpdate.mockResolvedValue(null);
     mocks.learningPathStepDeleteMany.mockResolvedValue({ count: 0 });
     mocks.learningPathStepFindFirst.mockResolvedValue(null);
@@ -334,8 +340,15 @@ it("génère un parcours en conservant la progression réelle de l'apprenant", a
     ],
   };
 
-  mocks.learningPathCreate.mockResolvedValueOnce(generatedPath);
+mocks.learningPathCreate.mockResolvedValueOnce({
+  id: generatedPath.id,
+});
 
+mocks.learningPathStepCreateMany.mockResolvedValueOnce({
+  count: 2,
+});
+
+mocks.learningPathFindFirstOrThrow.mockResolvedValueOnce(generatedPath);
   // Exécute la génération du parcours.
   const result = await generateLearningPath(context, "formation-1");
 
@@ -351,19 +364,29 @@ it("génère un parcours en conservant la progression réelle de l'apprenant", a
   expect(createCall.data.userId).toBe(context.userId);
   expect(createCall.data.formationId).toBe("formation-1");
 
-  // Vérifie l'ordre et les statuts des étapes créées.
-  expect(createCall.data.steps.create).toEqual([
-    expect.objectContaining({
-      lessonId: "lesson-1",
-      position: 1,
-      status: "COMPLETED",
-    }),
-    expect.objectContaining({
-      lessonId: "lesson-2",
-      position: 2,
-      status: "PENDING",
-    }),
-  ]);
+  // Vérifie les étapes créées séparément avec createMany.
+expect(mocks.learningPathStepCreateMany).toHaveBeenCalledOnce();
+
+const stepsCall = mocks.learningPathStepCreateMany.mock.calls[0][0];
+
+expect(stepsCall.data).toEqual([
+  expect.objectContaining({
+    tenantId: context.tenantId,
+    learningPathId: "path-1",
+    lessonId: "lesson-1",
+    position: 1,
+    status: "COMPLETED",
+  }),
+  expect.objectContaining({
+    tenantId: context.tenantId,
+    learningPathId: "path-1",
+    lessonId: "lesson-2",
+    position: 2,
+    status: "PENDING",
+  }),
+]);
+
+expect(mocks.learningPathFindFirstOrThrow).toHaveBeenCalledOnce();
 });
 
 
@@ -412,8 +435,9 @@ it("retourne le parcours actif existant sans en créer un nouveau", async () => 
         tenantId: context.tenantId,
         userId: context.userId,
         formationId: "formation-1",
-        status: "ACTIVE",
-      },
+status: {
+  in: ["ACTIVE", "ARCHIVED"],
+},      },
     }),
   );
 });
