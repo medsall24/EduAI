@@ -168,6 +168,11 @@ const permissions = [
     name: "ai.chat",
     description: "Utiliser l'assistant pédagogique IA",
   },
+
+  {
+  name: "ai.trainer",
+  description: "Utiliser les outils IA d'assistance pédagogique aux formateurs",
+},
 ];
 
 // Fonction principale de synchronisation des permissions RBAC.
@@ -229,6 +234,7 @@ const main = async (): Promise<void> => {
       "enrollment.read",
 
       "ai.chat",
+      "ai.trainer",
     ],
 
     // L'APPRENANT dispose de permissions de consultation

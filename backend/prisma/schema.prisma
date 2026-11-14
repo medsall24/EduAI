@@ -33,6 +33,7 @@ model Tenant {
   learningPaths      LearningPath[]
   learningPathSteps  LearningPathStep[]
   learningPathOutbox LearningPathOutbox[]
+  aiTrainerDrafts    AITrainerDraft[]
 }
 
 model Role {
@@ -89,6 +90,7 @@ model User {
   aiConversations AIConversation[]
   aiUsage         AIUsage[]
   learningPaths   LearningPath[]
+  aiTrainerDrafts AITrainerDraft[] @relation("AITrainerDraftCreator")
 
   tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   role   Role?   @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Restrict)
@@ -129,24 +131,25 @@ model Category {
 }
 
 model Formation {
-  id            String          @id @default(uuid())
-  tenantId      String
-  categoryId    String
-  formateurId   String
-  title         String
-  slug          String
-  description   String?
-  thumbnailUrl  String?
-  status        FormationStatus @default(DRAFT)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  enrollments   Enrollment[]
-  category      Category        @relation(fields: [tenantId, categoryId], references: [tenantId, id])
-  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  formateur     User            @relation(fields: [tenantId, formateurId], references: [tenantId, id])
-  modules       Module[]
-  progress      Progress[]
-  learningPaths LearningPath[]
+  id              String           @id @default(uuid())
+  tenantId        String
+  categoryId      String
+  formateurId     String
+  title           String
+  slug            String
+  description     String?
+  thumbnailUrl    String?
+  status          FormationStatus  @default(DRAFT)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  enrollments     Enrollment[]
+  category        Category         @relation(fields: [tenantId, categoryId], references: [tenantId, id])
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  formateur       User             @relation(fields: [tenantId, formateurId], references: [tenantId, id])
+  modules         Module[]
+  progress        Progress[]
+  learningPaths   LearningPath[]
+  aiTrainerDrafts AITrainerDraft[]
 
   @@unique([tenantId, categoryId, id])
   @@unique([tenantId, slug])
@@ -193,6 +196,7 @@ model Lesson {
   progress          Progress[]
   quizzes           Quiz[]
   learningPathSteps LearningPathStep[]
+  aiTrainerDrafts   AITrainerDraft[]
 
   @@unique([tenantId, id])
   @@unique([tenantId, moduleId, id])
@@ -457,7 +461,7 @@ model LearningPathStep {
   status               LearningPathStepStatus @default(PENDING)
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
-  sourceAttemptId String?
+  sourceAttemptId      String?
 
   tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   learningPath LearningPath @relation(fields: [tenantId, learningPathId], references: [tenantId, id], onDelete: Cascade)
@@ -465,9 +469,9 @@ model LearningPathStep {
 
   @@unique([tenantId, id])
   @@unique([tenantId, learningPathId, position])
+  @@unique([tenantId, learningPathId, sourceAttemptId])
   @@index([tenantId, learningPathId, status])
   @@index([tenantId, lessonId])
-  @@unique([tenantId, learningPathId, sourceAttemptId])
 }
 
 model LearningPathOutbox {
@@ -493,6 +497,31 @@ model LearningPathOutbox {
   @@index([tenantId, status, nextRetryAt])
   @@index([status, nextRetryAt, createdAt])
   @@index([tenantId, aggregateId, createdAt])
+}
+
+model AITrainerDraft {
+  id           String               @id @default(uuid())
+  tenantId     String
+  formateurId  String
+  formationId  String
+  lessonId     String?
+  type         AITrainerDraftType
+  content      Json
+  status       AITrainerDraftStatus @default(PENDING)
+  reviewedAt   DateTime?
+  reviewedById String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  formateur User      @relation("AITrainerDraftCreator", fields: [tenantId, formateurId], references: [tenantId, id], onDelete: Cascade)
+  formation Formation @relation(fields: [tenantId, formationId], references: [tenantId, id], onDelete: Cascade)
+  lesson    Lesson?   @relation(fields: [tenantId, lessonId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, formateurId, status, createdAt])
+  @@index([tenantId, formationId])
+  @@index([tenantId, lessonId])
 }
 
 enum SystemRole {
@@ -587,4 +616,16 @@ enum LearningPathOutboxStatus {
   PROCESSING
   PROCESSED
   FAILED
+}
+
+enum AITrainerDraftType {
+  QUIZ
+  EXERCISE
+  LESSON_CONTENT
+}
+
+enum AITrainerDraftStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }

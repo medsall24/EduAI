@@ -19,6 +19,22 @@ import {
   sendMessage,
 } from "./ai.conversation.service.js";
 
+import {
+  generateTrainerContentSchema,
+  trainerDraftIdSchema,
+  listTrainerDraftsSchema,
+  updateTrainerDraftSchema,
+  reviewTrainerDraftSchema,
+} from "./ai.trainer.schema.js";
+
+import {
+  generateTrainerContent,
+  listTrainerDrafts,
+  getTrainerDraftById,
+  updateTrainerDraft,
+  reviewTrainerDraft,
+} from "./ai.trainer.service.js";
+
 // Construit le contexte de sécurité à partir du JWT authentifié.
 function getAIUserContext(req: Request) {
   return {
@@ -277,6 +293,183 @@ export async function getPerformanceController(
     });
   } catch (error) {
     // Transmet les erreurs au gestionnaire central d'Express.
+    next(error);
+  }
+}
+
+// Génère un contenu pédagogique et l'enregistre comme brouillon.
+export async function generateTrainerContentController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const validation = generateTrainerContentSchema.safeParse(req.body);
+
+    if (!validation.success) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid trainer content data",
+        errors: validation.error.flatten(),
+      });
+    }
+
+    const draft = await generateTrainerContent(
+      getAIUserContext(req),
+      validation.data,
+    );
+
+    return res.status(201).json({
+      success: true,
+      data: draft,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// Liste les brouillons du formateur avec des filtres facultatifs.
+export async function listTrainerDraftsController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const validation = listTrainerDraftsSchema.safeParse(req.query);
+
+    if (!validation.success) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid trainer draft filters",
+        errors: validation.error.flatten(),
+      });
+    }
+
+    const drafts = await listTrainerDrafts(
+      getAIUserContext(req),
+      validation.data,
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: drafts,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// Consulte le contenu détaillé d'un brouillon appartenant au formateur.
+export async function getTrainerDraftByIdController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const validation = trainerDraftIdSchema.safeParse(req.params);
+
+    if (!validation.success) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid trainer draft ID",
+        errors: validation.error.flatten(),
+      });
+    }
+
+    const draft = await getTrainerDraftById(
+      getAIUserContext(req),
+      validation.data.draftId,
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: draft,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// Modifie le contenu d'un brouillon encore en attente.
+export async function updateTrainerDraftController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const paramsValidation = trainerDraftIdSchema.safeParse(req.params);
+
+    if (!paramsValidation.success) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid trainer draft ID",
+        errors: paramsValidation.error.flatten(),
+      });
+    }
+
+    const bodyValidation = updateTrainerDraftSchema.safeParse(req.body);
+
+    if (!bodyValidation.success) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid trainer draft data",
+        errors: bodyValidation.error.flatten(),
+      });
+    }
+
+    const draft = await updateTrainerDraft(
+      getAIUserContext(req),
+      paramsValidation.data.draftId,
+      bodyValidation.data,
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: draft,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// Enregistre la décision humaine du formateur sur un brouillon.
+export async function reviewTrainerDraftController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const paramsValidation = trainerDraftIdSchema.safeParse(req.params);
+
+    if (!paramsValidation.success) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid trainer draft ID",
+        errors: paramsValidation.error.flatten(),
+      });
+    }
+
+    const bodyValidation = reviewTrainerDraftSchema.safeParse(req.body);
+
+    if (!bodyValidation.success) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid trainer review data",
+        errors: bodyValidation.error.flatten(),
+      });
+    }
+
+    const draft = await reviewTrainerDraft(
+      getAIUserContext(req),
+      paramsValidation.data.draftId,
+      bodyValidation.data,
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: draft,
+    });
+  } catch (error) {
     next(error);
   }
 }

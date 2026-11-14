@@ -19,6 +19,11 @@ import {
   sendMessageController,
   getRecommendationsController,
   getPerformanceController,
+  generateTrainerContentController,
+  listTrainerDraftsController,
+  getTrainerDraftByIdController,
+  updateTrainerDraftController,
+  reviewTrainerDraftController,
 } from "./ai.controller.js";
 
 // Initialise le routeur Express du module IA.
@@ -94,6 +99,50 @@ router.get(
   authenticate,
   requirePermission("ai.chat"),
   getPerformanceController,
+);
+
+// ============================================
+// ASSISTANCE AUX FORMATEURS — PERMISSION ai.trainer
+// ============================================
+
+// Génère un contenu pédagogique et crée un brouillon.
+router.post(
+  "/trainer/drafts/generate",
+  authenticate,
+  requirePermission("ai.trainer"),
+  generateTrainerContentController,
+);
+
+// Liste les brouillons du formateur avec filtres facultatifs.
+router.get(
+  "/trainer/drafts",
+  authenticate,
+  requirePermission("ai.trainer"),
+  listTrainerDraftsController,
+);
+
+// Consulte un brouillon précis.
+router.get(
+  "/trainer/drafts/:draftId",
+  authenticate,
+  requirePermission("ai.trainer"),
+  getTrainerDraftByIdController,
+);
+
+// Modifie un brouillon encore en attente.
+router.patch(
+  "/trainer/drafts/:draftId",
+  authenticate,
+  requirePermission("ai.trainer"),
+  updateTrainerDraftController,
+);
+
+// Approuve ou rejette un brouillon.
+router.patch(
+  "/trainer/drafts/:draftId/review",
+  authenticate,
+  requirePermission("ai.trainer"),
+  reviewTrainerDraftController,
 );
 
 // Exporte le routeur pour son intégration dans l'application Express.
