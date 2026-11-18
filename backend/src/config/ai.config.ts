@@ -25,6 +25,7 @@ if (providerValue !== "gemini" && providerValue !== "openrouter") {
 
 export const aiConfig = {
   provider: providerValue as AIProvider,
+  openrouterHttpReferer: getOptionalEnv("OPENROUTER_HTTP_REFERER"),
   gemini: {
     apiKey: getOptionalEnv("GEMINI_API_KEY"),
     model: getOptionalEnv("GEMINI_MODEL"),

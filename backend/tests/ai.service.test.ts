@@ -217,7 +217,11 @@ describe("AI service", () => {
     expect(
       (options.headers as Record<string, string>).Authorization,
     ).toBe("Bearer test-openrouter-key");
+    expect(
+  (options.headers as Record<string, string>)["HTTP-Referer"],
+).toBe("http://localhost:5000");
   });
+  
 
   it("convertit les rôles et ajoute l'instruction système pour OpenRouter", async () => {
     configMocks.aiConfig.provider = "openrouter";
@@ -535,4 +539,48 @@ it("propage une erreur lorsque la requête OpenRouter dépasse le délai autoris
     expect(result.inputTokens).toBeNull();
     expect(result.outputTokens).toBeNull();
   });
+
+  it("refuse un JSON invalide retourné par Gemini avec HTTP 200", async () => {
+  configMocks.aiConfig.provider = "gemini";
+  configMocks.getActiveAIConfig.mockReturnValue({
+    apiKey: "test-gemini-key",
+    model: "test-gemini-model",
+  });
+
+  mockFetch.mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: vi.fn().mockRejectedValue(
+      new SyntaxError("Unexpected token in JSON"),
+    ),
+  } as unknown as Response);
+
+  vi.stubGlobal("fetch", mockFetch);
+
+  await expect(
+    askAI([{ role: "user", content: "Bonjour" }]),
+  ).rejects.toThrow("Gemini returned an invalid JSON response.");
+});
+
+it("refuse un JSON invalide retourné par OpenRouter avec HTTP 200", async () => {
+  configMocks.aiConfig.provider = "openrouter";
+  configMocks.getActiveAIConfig.mockReturnValue({
+    apiKey: "test-openrouter-key",
+    model: "test-openrouter-model",
+  });
+
+  mockFetch.mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: vi.fn().mockRejectedValue(
+      new SyntaxError("Unexpected token in JSON"),
+    ),
+  } as unknown as Response);
+
+  vi.stubGlobal("fetch", mockFetch);
+
+  await expect(
+    askAI([{ role: "user", content: "Bonjour" }]),
+  ).rejects.toThrow("OpenRouter returned an invalid JSON response.");
+});
 });

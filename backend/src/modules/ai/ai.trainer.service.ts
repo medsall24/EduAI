@@ -278,6 +278,7 @@ ${input.instructions}`;
 function validateGeneratedContent(
   type: GenerateTrainerContentInput["type"],
   value: unknown,
+  expectedQuestionCount?: number,
 ): GeneratedTrainerContent {
   if (
     typeof value !== "object" ||
@@ -299,12 +300,22 @@ function validateGeneratedContent(
 
   if (type === "QUIZ") {
     if (
-      !requiredString("description") ||
-      !Array.isArray(data.questions) ||
-      data.questions.length === 0
-    ) {
-      throw new AppError(502, "Structure du quiz généré invalide.");
-    }
+  !requiredString("description") ||
+  !Array.isArray(data.questions) ||
+  data.questions.length === 0
+) {
+  throw new AppError(502, "Structure du quiz généré invalide.");
+}
+
+if (
+  expectedQuestionCount !== undefined &&
+  data.questions.length !== expectedQuestionCount
+) {
+  throw new AppError(
+    502,
+    `Le fournisseur IA devait générer exactement ${expectedQuestionCount} questions, mais en a généré ${data.questions.length}.`,
+  );
+}
 
     const questions = data.questions.map((item) => {
       if (
@@ -509,14 +520,15 @@ export async function generateTrainerContent(
   }
 
   const response = await askAI(
-    [
-      {
-        role: "user",
-        content: buildTrainerPrompt(input),
-      },
-    ],
-    "Tu es un moteur de génération de contenus pédagogiques structurés. Respecte strictement le format JSON demandé.",
-  );
+  [
+    {
+      role: "user",
+      content: buildTrainerPrompt(input),
+    },
+  ],
+  "Tu es un moteur de génération de contenus pédagogiques structurés. Respecte strictement le format JSON demandé.",
+  input.type === "LESSON_CONTENT" ? 2048 : 1024,
+);
 
   let parsedContent: unknown;
 
@@ -530,9 +542,10 @@ export async function generateTrainerContent(
   }
 
   const content = validateGeneratedContent(
-    input.type,
-    parsedContent,
-  );
+  input.type,
+  parsedContent,
+  input.type === "QUIZ" ? input.questionCount ?? 5 : undefined,
+);
 
   return prisma.aITrainerDraft.create({
     data: {
@@ -661,6 +674,7 @@ export async function updateTrainerDraft(
     select: {
       id: true,
       status: true,
+      type: true,
     },
   });
 
@@ -675,6 +689,21 @@ export async function updateTrainerDraft(
     );
   }
 
+  let validatedContent: GeneratedTrainerContent;
+
+try {
+  validatedContent = validateGeneratedContent(
+    existingDraft.type as GenerateTrainerContentInput["type"],
+    input.content,
+  );
+} catch (error) {
+  if (error instanceof AppError) {
+    throw new AppError(400, error.message);
+  }
+
+  throw error;
+}
+
   const result = await prisma.aITrainerDraft.updateMany({
     where: {
       id: draftId,
@@ -683,8 +712,7 @@ export async function updateTrainerDraft(
       status: "PENDING",
     },
     data: {
-      content: JSON.parse(JSON.stringify(input.content)),
-    },
+      content: JSON.parse(JSON.stringify(validatedContent)),    },
   });
 
   if (result.count === 0) {

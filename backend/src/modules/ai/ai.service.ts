@@ -74,6 +74,7 @@ async function fetchWithTimeout(
 async function askGemini(
   messages: AIMessage[],
   systemInstruction?: string,
+  maxOutputTokens = 1024,
 ): Promise<AIResponse> {
   const config = getActiveAIConfig();
 
@@ -99,8 +100,7 @@ async function askGemini(
         contents,
         generationConfig: {
           temperature: 0.4,
-          maxOutputTokens: 1024,
-        },
+          maxOutputTokens,        },
       }),
     },
   );
@@ -155,6 +155,7 @@ if (!response.ok) {
 async function askOpenRouter(
   messages: AIMessage[],
   systemInstruction?: string,
+  maxOutputTokens = 1024,
 ): Promise<AIResponse> {
   const config = getActiveAIConfig();
 
@@ -165,8 +166,8 @@ async function askOpenRouter(
       headers: {
         Authorization: `Bearer ${config.apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "http://localhost:5000",
-        "X-Title": "EduAI",
+        "HTTP-Referer":
+          aiConfig.openrouterHttpReferer ?? "http://localhost:5000",        "X-Title": "EduAI",
       },
       body: JSON.stringify({
         model: config.model,
@@ -180,8 +181,7 @@ async function askOpenRouter(
           })),
         ],
         temperature: 0.4,
-        max_tokens: 1024,
-      }),
+        max_tokens: maxOutputTokens,      }),
     },
   );
 
@@ -236,6 +236,7 @@ if (!response.ok) {
 export async function askAI(
   messages: AIMessage[],
   systemInstruction?: string,
+  maxOutputTokens = 1024,
 ): Promise<AIResponse> {
   // Vérifie qu'au moins un message est fourni.
   if (messages.length === 0) {
@@ -249,10 +250,10 @@ export async function askAI(
     }
   }
 
-  // Sélectionne le fournisseur configuré.
+    // Sélectionne le fournisseur configuré.
   if (aiConfig.provider === "gemini") {
-    return askGemini(messages, systemInstruction);
+    return askGemini(messages, systemInstruction, maxOutputTokens);
   }
 
-  return askOpenRouter(messages, systemInstruction);
+  return askOpenRouter(messages, systemInstruction, maxOutputTokens);
 }

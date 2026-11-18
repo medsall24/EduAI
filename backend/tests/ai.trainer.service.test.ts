@@ -220,6 +220,72 @@ describe("AI trainer service", () => {
     expect(result.type).toBe("QUIZ");
   });
 
+    it("refuse un quiz contenant moins de questions que demandé", async () => {
+    await expect(
+      generateTrainerContent(context, {
+        formationId,
+        type: "QUIZ",
+        instructions: "Créer un quiz sur JavaScript.",
+        questionCount: 2,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 502,
+    });
+
+    expect(draftCreate).not.toHaveBeenCalled();
+  });
+
+  it("refuse un quiz contenant plus de questions que demandé", async () => {
+    const twoQuestions = {
+      title: "Quiz JavaScript",
+      description: "Évaluation JavaScript",
+      questions: [
+        {
+          text: "Question 1 ?",
+          type: "SINGLE_CHOICE",
+          points: 1,
+          explanation: "Explication 1.",
+          options: [
+            { text: "A", isCorrect: true },
+            { text: "B", isCorrect: false },
+          ],
+        },
+        {
+          text: "Question 2 ?",
+          type: "SINGLE_CHOICE",
+          points: 1,
+          explanation: "Explication 2.",
+          options: [
+            { text: "A", isCorrect: true },
+            { text: "B", isCorrect: false },
+          ],
+        },
+      ],
+    };
+
+    askAIMock.mockResolvedValueOnce({
+      success: true,
+      provider: "gemini",
+      model: "test-model",
+      inputTokens: 10,
+      outputTokens: 10,
+      content: JSON.stringify(twoQuestions),
+    });
+
+    await expect(
+      generateTrainerContent(context, {
+        formationId,
+        type: "QUIZ",
+        instructions: "Créer un quiz sur JavaScript.",
+        questionCount: 1,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 502,
+    });
+
+    expect(draftCreate).not.toHaveBeenCalled();
+  });
+
   it("refuse un JSON invalide retourné par le fournisseur IA", async () => {
     askAIMock.mockResolvedValueOnce({
       success: true,
@@ -500,40 +566,61 @@ describe("Consultation individuelle", () => {
 });
 
 describe("Modification des brouillons", () => {
-  it("permet de modifier un brouillon PENDING", async () => {
-    const updatedDraft = {
+  it("permet de modifier un brouillon QUIZ PENDING avec un contenu valide", async () => {
+  const validQuiz = {
+    title: "Quiz JavaScript modifié",
+    description: "Évaluation des connaissances JavaScript",
+    questions: [
+      {
+        text: "Que signifie JavaScript ?",
+        type: "SINGLE_CHOICE",
+        points: 2,
+        explanation: "JavaScript est un langage de programmation.",
+        options: [
+          { text: "Un langage de programmation", isCorrect: true },
+          { text: "Un système d'exploitation", isCorrect: false },
+        ],
+      },
+    ],
+  };
+
+  const updatedDraft = {
+    id: draftId,
+    formationId,
+    lessonId: null,
+    type: "QUIZ",
+    content: validQuiz,
+    status: "PENDING",
+    updatedAt: new Date(),
+  };
+
+  draftFindFirst
+    .mockResolvedValueOnce({
       id: draftId,
-      formationId,
-      lessonId: null,
-      type: "QUIZ",
-      content: { title: "Quiz JavaScript modifié" },
       status: "PENDING",
-      updatedAt: new Date(),
-    };
+      type: "QUIZ",
+    })
+    .mockResolvedValueOnce(updatedDraft);
 
-    draftFindFirst
-      .mockResolvedValueOnce({ id: draftId, status: "PENDING" })
-      .mockResolvedValueOnce(updatedDraft);
+  draftUpdateMany.mockResolvedValueOnce({ count: 1 });
 
-    draftUpdateMany.mockResolvedValueOnce({ count: 1 });
-
-    const result = await updateTrainerDraft(context, draftId, {
-      content: { title: "Quiz JavaScript modifié" },
-    });
-
-    expect(draftUpdateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          id: draftId,
-          tenantId: context.tenantId,
-          formateurId: context.userId,
-          status: "PENDING",
-        },
-      }),
-    );
-
-    expect(result).toEqual(updatedDraft);
+  const result = await updateTrainerDraft(context, draftId, {
+    content: validQuiz,
   });
+
+  expect(draftUpdateMany).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: {
+        id: draftId,
+        tenantId: context.tenantId,
+        formateurId: context.userId,
+        status: "PENDING",
+      },
+    }),
+  );
+
+  expect(result).toEqual(updatedDraft);
+});
 
   it("refuse de modifier un brouillon déjà approuvé", async () => {
     draftFindFirst.mockResolvedValueOnce({
@@ -567,22 +654,40 @@ describe("Modification des brouillons", () => {
   });
 
   it("gère un conflit si le brouillon change de statut pendant la modification", async () => {
-    draftFindFirst.mockResolvedValueOnce({
-      id: draftId,
-      status: "PENDING",
-    });
+  const validQuiz = {
+    title: "Quiz JavaScript",
+    description: "Évaluation JavaScript",
+    questions: [
+      {
+        text: "Que signifie JavaScript ?",
+        type: "SINGLE_CHOICE",
+        points: 2,
+        explanation: "JavaScript est un langage de programmation.",
+        options: [
+          { text: "Un langage de programmation", isCorrect: true },
+          { text: "Un système d'exploitation", isCorrect: false },
+        ],
+      },
+    ],
+  };
 
-    draftUpdateMany.mockResolvedValueOnce({ count: 0 });
-
-    await expect(
-      updateTrainerDraft(context, draftId, {
-        content: { title: "Modification concurrente" },
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 409,
-      message: "Le brouillon a changé de statut et ne peut plus être modifié.",
-    });
+  draftFindFirst.mockResolvedValueOnce({
+    id: draftId,
+    status: "PENDING",
+    type: "QUIZ",
   });
+
+  draftUpdateMany.mockResolvedValueOnce({ count: 0 });
+
+  await expect(
+    updateTrainerDraft(context, draftId, {
+      content: validQuiz,
+    }),
+  ).rejects.toMatchObject({
+    statusCode: 409,
+    message: "Le brouillon a changé de statut et ne peut plus être modifié.",
+  });
+});
 });
 
 describe("Validation des brouillons", () => {
@@ -807,6 +912,7 @@ it("refuse une question à choix multiple avec une seule bonne réponse", async 
       formationId,
       type: "QUIZ",
       instructions: "Créer un quiz sur JavaScript.",
+      questionCount: 1,
     }),
   ).rejects.toMatchObject({
     statusCode: 502,
@@ -847,6 +953,7 @@ it("refuse une question vrai/faux avec trois propositions", async () => {
       formationId,
       type: "QUIZ",
       instructions: "Créer un quiz sur JavaScript.",
+      questionCount: 1,
     }),
   ).rejects.toMatchObject({
     statusCode: 502,

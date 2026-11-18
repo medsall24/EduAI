@@ -277,29 +277,45 @@ const main = async (): Promise<void> => {
         `No role found for role name: ${roleName}`,
       );
     }
-
     // Synchronisation des permissions pour chaque rôle
     // appartenant aux différents tenants.
     for (const role of roles) {
-      // Association de chaque permission au rôle courant.
-      for (const permissionName of permissionNames) {
-        const permission =
-          await prisma.permission.findUnique({
-            where: {
-              name: permissionName,
-            },
-          });
+      // Récupération des permissions attendues pour ce rôle.
+      const expectedPermissions = await prisma.permission.findMany({
+        where: {
+          name: {
+            in: permissionNames,
+          },
+        },
+        select: {
+          id: true,
+        },
+      });
 
-        // Vérification de l'existence de la permission
-        // avant la création de l'association.
+      // Suppression des associations de permissions obsolètes.
+      await prisma.rolePermission.deleteMany({
+        where: {
+          roleId: role.id,
+          permissionId: {
+            notIn: expectedPermissions.map((permission) => permission.id),
+          },
+        },
+      });
+
+      // Création des associations de permissions manquantes.
+      for (const permissionName of permissionNames) {
+        const permission = await prisma.permission.findUnique({
+          where: {
+            name: permissionName,
+          },
+        });
+
         if (!permission) {
           throw new Error(
             `Permission not found: ${permissionName}`,
           );
         }
 
-        // Création de l'association si elle n'existe pas déjà.
-        // L'upsert garantit l'idempotence du seed.
         await prisma.rolePermission.upsert({
           where: {
             roleId_permissionId: {
@@ -315,7 +331,6 @@ const main = async (): Promise<void> => {
         });
       }
     }
-  }
 
   // Confirmation de la synchronisation des permissions.
   console.log(
@@ -335,4 +350,4 @@ main()
   .finally(async () => {
     // Fermeture propre de la connexion Prisma.
     await prisma.$disconnect();
-  });
+  })};

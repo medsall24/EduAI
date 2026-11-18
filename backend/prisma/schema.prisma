@@ -91,6 +91,7 @@ model User {
   aiUsage         AIUsage[]
   learningPaths   LearningPath[]
   aiTrainerDrafts AITrainerDraft[] @relation("AITrainerDraftCreator")
+  aiTrainerReviewedDrafts AITrainerDraft[] @relation("AITrainerDraftReviewer")
 
   tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   role   Role?   @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Restrict)
@@ -515,6 +516,7 @@ model AITrainerDraft {
 
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   formateur User      @relation("AITrainerDraftCreator", fields: [tenantId, formateurId], references: [tenantId, id], onDelete: Cascade)
+  reviewedBy User? @relation("AITrainerDraftReviewer", fields: [tenantId, reviewedById], references: [tenantId, id], onDelete: Restrict)
   formation Formation @relation(fields: [tenantId, formationId], references: [tenantId, id], onDelete: Cascade)
   lesson    Lesson?   @relation(fields: [tenantId, lessonId], references: [tenantId, id], onDelete: Cascade)
 

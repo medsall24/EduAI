@@ -47,13 +47,17 @@ export const errorHandler: ErrorRequestHandler = (
   // Les erreurs de validation Zod correspondent
   // à une requête client incorrecte.
   if (error instanceof ZodError) {
-    res.status(400).json({
-      success: false,
-      message: "Validation failed",
-      errors: error.issues,
-    });
-    return;
-  }
+  res.status(400).json({
+    success: false,
+    message: "Validation failed",
+    errors: error.issues.map((issue) => ({
+      code: issue.code,
+      path: issue.path,
+      message: issue.message,
+    })),
+  });
+  return;
+}
 
   // Reconnaît les erreurs générées par le parseur JSON d'Express.
   if (error instanceof Error) {
